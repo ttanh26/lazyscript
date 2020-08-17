@@ -11,6 +11,8 @@ import librosa as li
 from google.cloud import storage
 from google.cloud import speech_v1 as speech
 from google.cloud.speech_v1 import enums
+import sounddevice as sd
+import io
 
 
 def get_path(src):
@@ -25,6 +27,12 @@ def get_path(src):
 
     return path_list
 
+def get_record(fs, duration):
+    print('Start recording...')
+    my_recording = sd.rec(int(fs * duration), samplerate= fs, channels= 1)
+    sd.wait()
+    print('Done!')
+    sf.write('./lazyscript/sample_audio/output.wav', my_recording, fs, subtype= 'PCM_16')
 
 def prepare_transcript(path, folder_path, seg_point):
     """
@@ -53,8 +61,8 @@ def prepare_transcript(path, folder_path, seg_point):
     end = len(audio) * 1000
     # print(f'split at {start} - {len(audio) * 1000} ms')
     audio_chunk = audio[start: end]
-    audio_chunk.export(f'{folder_path}/audio_chunk{idx}.wav', format= 'wav')
-    order_list.append(f'{folder_path}/audio_chunk{idx}.wav')
+    audio_chunk.export(f'{folder_path}/audio_chunk{idx + 1}.wav', format= 'wav')
+    order_list.append(f'{folder_path}/audio_chunk{idx + 1}.wav')
 
     return order_list
 
@@ -90,6 +98,7 @@ def cluster_seg(order_list, min_cluster, max_cluster, n_features, n_mfcc):
     clusterer = SpectralClusterer(min_clusters= min_cluster, max_clusters= max_cluster)
     labels = clusterer.predict(n_feat)
     labels = [str(x) for x in labels]
+    print(labels)
     # Convert from cluster labels to speaker identification
     speaker_tag = {}
     n = 1
@@ -184,13 +193,13 @@ def speech_to_text_long(storage_uri, labels, transcript_path, sample_rate = 1600
 
     print(u"Waiting for operation to complete...")
     response = operation.result()
-    text = ''
+    text = labels
     
     for result in response.results:
         # First alternative is the most probable result
         alternative = result.alternatives[0]
-        text += labels + alternative.transcript
-        print(u"Transcript: {}".format(alternative.transcript))
+        text += alternative.transcript 
+        # print(u"Transcript: {}".format(alternative.transcript))
 
     return text
 
@@ -231,10 +240,66 @@ def work_in_cloud(order_list, labels, transcript_path, sample_rate = 16000):
         upload_object(bucket_name= bucket_name, file_path= file_path, destination_blob_name= destination_blob_name)
         
         # Using Google Speech-to-text API to convert to text for each audio file we upload to cloud storage
-        text = speech_to_text_long(f'gs://{bucket_name}/{destination_blob_name}', labels[idx], transcript_path, sr = sample_rate)
+        text = speech_to_text_long(f'gs://{bucket_name}/{destination_blob_name}', labels[idx], transcript_path, sample_rate= sample_rate)
         text_list.append(text)
 
     # Concatanating into a string and save the transcript into a text file
     texting = '\n'.join(text_list)
     with open(transcript_path, 'w') as f:
         f.write(texting)
+
+
+def sample_recognize(local_file_path, labels):
+    """
+    Transcribe a short audio file using synchronous speech recognition
+
+    Args:
+      local_file_path Path to local audio file, e.g. /path/audio.wav
+    """
+
+    client = speech.SpeechClient()
+
+    # local_file_path = 'resources/brooklyn_bridge.raw'
+
+    # The language of the supplied audio
+    language_code = "en-US"
+
+    # Sample rate in Hertz of the audio data sent
+    sample_rate_hertz = 16000
+
+    # Encoding of audio data sent. This sample sets this explicitly.
+    # This field is optional for FLAC and WAV audio formats.
+    encoding = enums.RecognitionConfig.AudioEncoding.LINEAR16
+    config = {
+        "language_code": language_code,
+        "sample_rate_hertz": sample_rate_hertz,
+        "encoding": encoding,
+    }
+    with io.open(local_file_path, "rb") as f:
+        content = f.read()
+    audio = {"content": content}
+
+    response = client.recognize(config, audio)
+    text = labels
+    for result in response.results:
+        # First alternative is the most probable result
+        alternative = result.alternatives[0]
+        text += alternative.transcript + '\n'
+
+    return text
+
+def work_in_local(order_list, labels, transcript_path, sample_rate = 16000):
+    transcript_path = os.path.join(transcript_path, 'transcript_125.txt')
+    text_list = []
+
+    for idx, file_path in enumerate(order_list):
+        # For audio has duration longer than 1 mins, we have to upload to cloud storage first
+        # Using Google Speech-to-text API to convert to text for each audio file we upload to cloud storage
+        text = sample_recognize(file_path, labels[idx])
+        text_list.append(text)
+
+    # Concatanating into a string and save the transcript into a text file
+    texting = '\n'.join(text_list)
+    with open(transcript_path, 'w') as f:
+        f.write(texting)
+

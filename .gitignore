@@ -1,3 +1,4 @@
 !/.gitignore
 save_audio
 sample_audio
+pretrained_model/weight.h5

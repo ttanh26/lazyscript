@@ -23,7 +23,7 @@ def speech_segmentation_model(pre_trained_path, load_weights= True):
     model.add(TimeDistributed(Dense(1, activation= 'sigmoid')))
 
     model.build(input_shape= (None, 200, 35))
-    # model.summary()
+    model.summary()
 
     model.load_weights(h5_model_file)
     return model
@@ -109,3 +109,5 @@ def multi_segmentation(file, model, sample_rate= 16000, frame_size= 1024, frame_
     return np.asarray(seg_point) / float(sr)
 
 
+# if __name__ == "__main__":
+#     speech_segmentation_model('./lazyscript/pretrained_model', load_weights= True)
