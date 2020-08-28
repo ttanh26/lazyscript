@@ -7,5 +7,7 @@ Try to classify different speaker in a conference and what did they say.
 # Approach
 Different speaker will have different ways of speaking that makes their voice become special. Therefore, based on some features of an audio signal like amplitudes and frequencies, we could detect the changing point between speakers. From these point, we could split the original one into smaller files which contains 1 speaker only in each file. Finally, by applying the Google API for each small files, we could get the transcript and then concatenate them to a long transcript for the whole audio files in the order of time.
 
+![Progress](https://user-images.githubusercontent.com/41542622/91522251-04645480-e924-11ea-8e9c-bbc9799865e1.png)
+
 # Demo
 
